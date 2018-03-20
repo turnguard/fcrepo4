@@ -175,7 +175,7 @@ public class FedoraResourceImpl extends JcrTools implements FedoraTypes, FedoraR
     public static final String LDPCV_BINARY_TIME_MAP = "fedora:binaryTimemap";
 
     // A curried type accepting resource, translator, and "minimality", returning triples.
-    private static interface RdfGenerator extends Function<FedoraResource,
+    protected static interface RdfGenerator extends Function<FedoraResource,
     Function<IdentifierConverter<Resource, FedoraResource>, Function<Boolean, Stream<Triple>>>> {}
 
     @SuppressWarnings("resource")
@@ -225,7 +225,7 @@ public class FedoraResourceImpl extends JcrTools implements FedoraTypes, FedoraR
         return streams.reduce(empty(), Stream::concat);
     });
 
-    private static final Map<TripleCategory, RdfGenerator> contextMap =
+    protected static final Map<TripleCategory, RdfGenerator> contextMap =
             ImmutableMap.<TripleCategory, RdfGenerator>builder()
                     .put(PROPERTIES, getDefaultTriples)
                     .put(EMBED_RESOURCES, getEmbeddedResourceTriples)

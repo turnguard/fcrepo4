@@ -26,6 +26,7 @@ import static org.fcrepo.kernel.api.FedoraTypes.FEDORA_NON_RDF_SOURCE_DESCRIPTIO
 import static org.fcrepo.kernel.api.FedoraTypes.FEDORA_RESOURCE;
 import static org.fcrepo.kernel.api.FedoraTypes.MEMENTO;
 import static org.fcrepo.kernel.api.FedoraTypes.MEMENTO_DATETIME;
+import static org.fcrepo.kernel.api.RdfLexicon.NT_LEAF_NODE;
 import static org.fcrepo.kernel.api.RdfLexicon.NT_VERSION_FILE;
 import static org.fcrepo.kernel.api.RequiredRdfContext.EMBED_RESOURCES;
 import static org.fcrepo.kernel.api.RequiredRdfContext.LDP_CONTAINMENT;
@@ -77,6 +78,7 @@ import org.fcrepo.kernel.api.identifiers.IdentifierConverter;
 import org.fcrepo.kernel.api.models.Container;
 import org.fcrepo.kernel.api.models.FedoraBinary;
 import org.fcrepo.kernel.api.models.FedoraResource;
+import org.fcrepo.kernel.api.models.NonRdfSourceDescription;
 import org.fcrepo.kernel.api.rdf.DefaultRdfStream;
 import org.fcrepo.kernel.api.services.BinaryService;
 import org.fcrepo.kernel.api.services.NodeService;
@@ -84,6 +86,7 @@ import org.fcrepo.kernel.api.services.VersionService;
 import org.fcrepo.kernel.api.services.policy.StoragePolicyDecisionPoint;
 import org.fcrepo.kernel.modeshape.ContainerImpl;
 import org.fcrepo.kernel.modeshape.FedoraBinaryImpl;
+import org.fcrepo.kernel.modeshape.NonRdfSourceDescriptionImpl;
 import org.fcrepo.kernel.modeshape.utils.iterators.RelaxedRdfAdder;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Component;;
@@ -133,7 +136,13 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
 
         assertMementoDoesNotExist(session, mementoPath);
 
-        final FedoraResource mementoResource = createContainer(session, mementoPath);
+        final FedoraResource mementoResource;
+        if (resource instanceof Container) {
+            mementoResource = createContainer(session, mementoPath);
+        } else {
+            mementoResource = createNonRdfSourceMemento(session, mementoPath);
+        }
+
         final String mementoUri = getUri(mementoResource, idTranslator);
 
         final String resourceUri = getUri(resource, idTranslator);
@@ -249,6 +258,25 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
 
             memento.setContent(resource.getContent(), resource.getMimeType(), checksums,
                     resource.getFilename(), null);
+        } catch (final RepositoryException e) {
+            throw new RepositoryRuntimeException(e);
+        }
+    }
+
+    private NonRdfSourceDescription createNonRdfSourceMemento(final FedoraSession session, final String path) {
+        try {
+            // Using nt:leafNode to avoid requiring jcr:content or allowing subfolders in memento
+            final Node dsNode = findOrCreateNode(session, path, NT_LEAF_NODE);
+
+            if (dsNode.canAddMixin(FEDORA_RESOURCE)) {
+                dsNode.addMixin(FEDORA_RESOURCE);
+            }
+
+            if (dsNode.canAddMixin(FEDORA_NON_RDF_SOURCE_DESCRIPTION)) {
+                dsNode.addMixin(FEDORA_NON_RDF_SOURCE_DESCRIPTION);
+            }
+
+            return new NonRdfSourceDescriptionImpl(dsNode);
         } catch (final RepositoryException e) {
             throw new RepositoryRuntimeException(e);
         }

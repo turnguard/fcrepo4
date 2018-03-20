@@ -30,6 +30,7 @@ import org.fcrepo.http.api.repository.FedoraRepositoryTransactions;
 import org.fcrepo.http.commons.api.rdf.UriAwareResourceModelFactory;
 import org.fcrepo.kernel.api.models.FedoraBinary;
 import org.fcrepo.kernel.api.models.FedoraResource;
+import org.fcrepo.kernel.api.models.NonRdfSourceDescription;
 import org.fcrepo.kernel.api.identifiers.IdentifierConverter;
 
 import org.springframework.stereotype.Component;
@@ -56,8 +57,12 @@ public class HttpApiResources implements UriAwareResourceModelFactory {
             addRepositoryStatements(uriInfo, model, s);
         }
 
-        if (resource.getDescribedResource() instanceof FedoraBinary) {
-            addContentStatements(idTranslator, (FedoraBinary)resource.getDescribedResource(), model);
+        if (resource instanceof NonRdfSourceDescription || resource instanceof FedoraBinary) {
+            if (resource.isMemento()) {
+                // TODO temporary hack while assessing memento changes
+            } else {
+                addContentStatements(idTranslator, (FedoraBinary) resource.getDescribedResource(), model);
+            }
         }
         return model;
     }

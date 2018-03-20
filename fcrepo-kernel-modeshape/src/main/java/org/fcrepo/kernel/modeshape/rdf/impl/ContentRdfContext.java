@@ -47,7 +47,7 @@ public class ContentRdfContext extends NodeRdfContext {
         super(resource, idTranslator);
 
         // if there's an accessible jcr:content node, include information about it
-        if (resource instanceof NonRdfSourceDescription) {
+        if (resource instanceof NonRdfSourceDescription && !resource.isMemento()) {
             final FedoraResource contentNode = resource().getDescribedResource();
             final Node subject = uriFor(resource());
             final Node contentSubject = uriFor(contentNode);

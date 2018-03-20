@@ -243,7 +243,6 @@ public class FedoraLdp extends ContentExposingResource {
         return ok().build();
     }
 
-
     /**
      * Retrieve the node profile
      *
@@ -654,7 +653,7 @@ public class FedoraLdp extends ContentExposingResource {
             if (aclResource == null) {
                 throw new InvalidACLException("The ACL URI in the link header does not exist\n");
             }
-        } catch (RepositoryRuntimeException e) {
+        } catch (final RepositoryRuntimeException e) {
             if (e.getCause() instanceof PathNotFoundException) {
                 throw new InvalidACLException("The external path of the link header's ACL URI was not found\n");
             } else {
@@ -693,7 +692,7 @@ public class FedoraLdp extends ContentExposingResource {
 
         try {
             Link aclLink = null;
-            for (String linkStr : links) {
+            for (final String linkStr : links) {
                 final Link link = Link.valueOf(linkStr);
                 if (link.getRel().equals("acl")) {
                     //throw constraint exception if there is a more than one rel='acl' link
@@ -705,7 +704,7 @@ public class FedoraLdp extends ContentExposingResource {
                 }
             }
             return (aclLink != null) ? aclLink.getUri() : null;
-        } catch (Exception ex) {
+        } catch (final Exception ex) {
             throw new ConstraintViolationException(ex.getMessage());
         }
     }

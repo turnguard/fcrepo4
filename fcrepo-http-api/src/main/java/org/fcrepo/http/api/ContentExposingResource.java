@@ -234,6 +234,7 @@ public abstract class ContentExposingResource extends FedoraBaseResource {
                         getResourceTriples(limit))),
                     session.getFedoraSession().getNamespaces());
         }
+
         setVaryAndPreferenceAppliedHeaders(servletResponse, prefer);
         return ok(outputStream).build();
     }
@@ -285,7 +286,7 @@ public abstract class ContentExposingResource extends FedoraBaseResource {
      */
     protected RdfStream getResourceTriples(final int limit) {
         // use the thing described, not the description, for the subject of descriptive triples
-        if (resource() instanceof NonRdfSourceDescription) {
+        if (resource() instanceof NonRdfSourceDescription && !resource().isMemento()) {
             resource = resource().getDescribedResource();
         }
         final PreferTag returnPreference;
@@ -469,6 +470,10 @@ public abstract class ContentExposingResource extends FedoraBaseResource {
 
     protected void addResourceLinkHeaders(final FedoraResource resource, final boolean includeAnchor) {
         if (resource instanceof NonRdfSourceDescription) {
+            // memento descriptin has no associated binary
+            if (resource.isMemento()) {
+                return;
+            }
             final URI uri = getUri(resource.getDescribedResource());
             final Link link = Link.fromUri(uri).rel("describes").build();
             servletResponse.addHeader(LINK, link.toString());
@@ -600,6 +605,10 @@ public abstract class ContentExposingResource extends FedoraBaseResource {
             // Do not add caching headers if in a transaction
             return;
         }
+        if (resource instanceof NonRdfSourceDescription && resource.isMemento()) {
+            // Do not add headers for description memento as it has no binary
+            return;
+        }
 
         final EntityTag etag;
         final Instant date;
@@ -662,6 +671,8 @@ public abstract class ContentExposingResource extends FedoraBaseResource {
             // Use a strong ETag for the LDP-NR
             etag = new EntityTag(resource.getDescription().getEtagValue());
             date = resource.getDescription().getLastModifiedDate();
+        } else if (resource instanceof NonRdfSourceDescription && resource.isMemento()) {
+            return;
         } else {
             // Use a strong ETag for the LDP-RS when validating If-(None)-Match headers
             etag = new EntityTag(resource.getDescribedResource().getEtagValue());

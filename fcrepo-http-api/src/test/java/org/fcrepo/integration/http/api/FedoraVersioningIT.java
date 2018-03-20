@@ -509,6 +509,25 @@ public class FedoraVersioningIT extends AbstractResourceIT {
     }
 
     @Test
+    public void testCreateVersionOfBinaryDescription() throws Exception {
+        createVersionedBinary(id);
+
+        final String descriptionUri = subjectUri + "/fcr:metadata";
+
+        final String mementoUri = createContainerMementoWithBody(descriptionUri, null);
+        assertMementoUri(mementoUri, descriptionUri);
+
+        try (final CloseableDataset dataset = getDataset(new HttpGet(mementoUri))) {
+            final DatasetGraph results = dataset.asDatasetGraph();
+
+            final Node mementoSubject = createURI(mementoUri);
+
+            assertFalse("Memento type should not be visible",
+                    results.contains(ANY, mementoSubject, RDF.type.asNode(), MEMENTO_TYPE_NODE));
+        }
+    }
+
+    @Test
     public void testGetUnversionedObjectVersionProfile() {
         final String pid = getRandomUniqueId();
 
@@ -865,7 +884,7 @@ public class FedoraVersioningIT extends AbstractResourceIT {
 
     private String createMemento(final String subjectUri, final String mementoDateTime, final String contentType,
             final String body) throws Exception {
-        final HttpPost createVersionMethod = postObjMethod(id + "/" + FCR_VERSIONS);
+        final HttpPost createVersionMethod = new HttpPost(subjectUri + "/" + FCR_VERSIONS);
         if (contentType != null) {
             createVersionMethod.addHeader(CONTENT_TYPE, contentType);
         }
@@ -1020,7 +1039,11 @@ public class FedoraVersioningIT extends AbstractResourceIT {
         return rdfTypes.toArray(new String[rdfTypes.size()]);
     }
 
-    protected static void assertMementoUri(final String mementoUri, final String subjectUri) {
+    private static void assertMementoUri(final String mementoUri, final String subjectUri) {
         assertTrue(mementoUri.matches(subjectUri + "/fcr:versions/\\d+"));
+    }
+
+    private static void assertNonRdfSourceMementoUri(final String mementoUri, final String subjectUri) {
+        assertTrue(mementoUri.matches(subjectUri + "/fcr:metadata/fcr:versions/\\d+"));
     }
 }

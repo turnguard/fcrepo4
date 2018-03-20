@@ -43,6 +43,8 @@
 + fedora:timemap (nt:folder) =fedora:TimeMap
 + fedora:binaryTimemap (nt:folder) =fedora:TimeMap
 
+[nt:leafNode] > nt:hierarchyNode
+
 /*
  * Any Fedora resource.
  */
