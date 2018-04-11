@@ -26,6 +26,7 @@ import static org.fcrepo.kernel.api.FedoraTypes.FEDORA_NON_RDF_SOURCE_DESCRIPTIO
 import static org.fcrepo.kernel.api.FedoraTypes.FEDORA_RESOURCE;
 import static org.fcrepo.kernel.api.FedoraTypes.MEMENTO;
 import static org.fcrepo.kernel.api.FedoraTypes.MEMENTO_DATETIME;
+import static org.fcrepo.kernel.api.FedoraTypes.MEMENTO_ORIGINAL;
 import static org.fcrepo.kernel.api.RdfLexicon.NT_LEAF_NODE;
 import static org.fcrepo.kernel.api.RdfLexicon.NT_VERSION_FILE;
 import static org.fcrepo.kernel.api.RequiredRdfContext.EMBED_RESOURCES;
@@ -145,13 +146,17 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
 
         final String mementoUri = getUri(mementoResource, idTranslator);
 
-        final String resourceUri = getUri(resource, idTranslator);
+        final String resourceUri;
 
         final RdfStream mementoRdfStream;
         if (rdfInputStream == null) {
             // With no rdf body provided, create version from current resource state.
-            mementoRdfStream = resource.getTriples(idTranslator, VERSION_TRIPLES);
+            final FedoraResource described = resource.getDescribedResource();
+            mementoRdfStream = described.getTriples(idTranslator, VERSION_TRIPLES);
+            resourceUri = getUri(described, idTranslator);
         } else {
+            resourceUri = getUri(resource, idTranslator);
+
             final Model inputModel = ModelFactory.createDefaultModel();
             inputModel.read(rdfInputStream, mementoUri, rdfFormat.getName());
 
@@ -161,12 +166,12 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
             mementoRdfStream = DefaultRdfStream.fromModel(createURI(mementoUri), inputModel);
         }
 
-        final RdfStream mappedStream = remapRdfSubjects(mementoUri, resourceUri, mementoRdfStream);
+        final RdfStream mappedStream = remapRdfSubjects(resourceUri, mementoUri, mementoRdfStream);
 
         final Session jcrSession = getJcrSession(session);
         new RelaxedRdfAdder(idTranslator, jcrSession, mappedStream, session.getNamespaces()).consume();
 
-        decorateWithMementoProperties(session, mementoPath, dateTime);
+        decorateWithMementoProperties(session, mementoPath, dateTime, resource);
 
         return mementoResource;
     }
@@ -185,7 +190,15 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
         }
     }
 
-    private RdfStream remapRdfSubjects(final String mementoUri, final String resourceUri, final RdfStream rdfStream) {
+    /**
+     * Remaps subject uris from resourceUri to mementoUri.
+     *
+     * @param resourceUri subject to remap from
+     * @param mementoUri subject to remap to
+     * @param rdfStream stream to map
+     * @return remapped stream
+     */
+    private RdfStream remapRdfSubjects(final String resourceUri, final String mementoUri, final RdfStream rdfStream) {
         final org.apache.jena.graph.Node mementoNode = createURI(mementoUri);
         final Stream<Triple> updatedSubjectStream = rdfStream.map(t -> {
             final org.apache.jena.graph.Node subject;
@@ -232,7 +245,7 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
             memento.setContent(contentStream, mimetype, checksums, filename, null);
         }
 
-        decorateWithMementoProperties(session, mementoPath, dateTime);
+        decorateWithMementoProperties(session, mementoPath, dateTime, resource);
 
         return memento;
     }
@@ -320,7 +333,7 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
     }
 
     protected void decorateWithMementoProperties(final FedoraSession session, final String mementoPath,
-            final Instant dateTime) {
+            final Instant dateTime, final FedoraResource originalResc) {
         try {
             final Node mementoNode = findNode(session, mementoPath);
             if (mementoNode.canAddMixin(MEMENTO)) {
@@ -329,6 +342,7 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
             final Calendar mementoDatetime = GregorianCalendar.from(
                     ZonedDateTime.ofInstant(dateTime, ZoneId.of("UTC")));
             mementoNode.setProperty(MEMENTO_DATETIME, mementoDatetime);
+            mementoNode.setProperty(MEMENTO_ORIGINAL, getJcrNode(originalResc));
         } catch (final RepositoryException e) {
             throw new RepositoryRuntimeException(e);
         }
