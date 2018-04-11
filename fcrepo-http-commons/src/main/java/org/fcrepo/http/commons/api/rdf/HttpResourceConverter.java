@@ -30,6 +30,7 @@ import static org.fcrepo.kernel.modeshape.FedoraSessionImpl.getJcrSession;
 import static org.fcrepo.kernel.modeshape.identifiers.NodeResourceConverter.nodeConverter;
 import static org.fcrepo.kernel.modeshape.utils.FedoraTypesUtils.getClosestExistingAncestor;
 import static org.fcrepo.kernel.modeshape.utils.NamespaceTools.validatePath;
+import static org.modeshape.jcr.api.JcrConstants.JCR_CONTENT;
 import static org.slf4j.LoggerFactory.getLogger;
 import static org.springframework.web.context.ContextLoader.getCurrentWebApplicationContext;
 
@@ -224,6 +225,7 @@ public class HttpResourceConverter extends IdentifierConverter<Resource,FedoraRe
                 final boolean metadata = matcher.group(2) != null;
                 final boolean versioning = matcher.group(3) != null;
                 final String basePath = matcher.group(1);
+                final boolean memento = matcher.group(4) != null;
 
                 if (versioning) {
                     // Disambiguate between a binary or non-binary timemap, as they can have overlapping external uris
@@ -244,6 +246,11 @@ public class HttpResourceConverter extends IdentifierConverter<Resource,FedoraRe
                         path = replaceOnce(path, "/" + FCR_VERSIONS, "/" + LDPCV_BINARY_TIME_MAP);
                     } else {
                         path = replaceOnce(path, "/" + FCR_VERSIONS, "/" + LDPCV_TIME_MAP);
+                    }
+
+                    // As there is no description, generate path directly to content node
+                    if (memento && binary) {
+                        path += "/" + JCR_CONTENT;
                     }
                 }
 

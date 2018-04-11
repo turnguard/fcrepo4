@@ -345,7 +345,7 @@ public class HttpResourceConverterTest {
         when(mementoNode.isNodeType(MEMENTO)).thenReturn(true);
         when(mementoNode.isNodeType(FEDORA_BINARY)).thenReturn(true);
         // Timemap for LDP-NR uses fedora:binaryTimemap name
-        when(session.getNode("/binary/fedora:binaryTimemap/20180315180915")).thenReturn(mementoNode);
+        when(session.getNode("/binary/fedora:binaryTimemap/20180315180915/jcr:content")).thenReturn(mementoNode);
 
         when(session.getNode("/binary")).thenReturn(node);
         when(node.isNodeType(FEDORA_NON_RDF_SOURCE_DESCRIPTION)).thenReturn(true);
