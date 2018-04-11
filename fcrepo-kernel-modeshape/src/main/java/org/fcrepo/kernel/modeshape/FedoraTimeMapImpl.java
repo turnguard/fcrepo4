@@ -17,17 +17,11 @@
  */
 package org.fcrepo.kernel.modeshape;
 
-import static org.fcrepo.kernel.modeshape.identifiers.NodeResourceConverter.nodeConverter;
-
-import java.util.Optional;
-
 import javax.jcr.Node;
-import javax.jcr.Property;
 import javax.jcr.RepositoryException;
 
 import org.fcrepo.kernel.api.exception.AccessDeniedException;
 import org.fcrepo.kernel.api.exception.RepositoryRuntimeException;
-import org.fcrepo.kernel.api.models.FedoraResource;
 import org.fcrepo.kernel.api.models.FedoraTimeMap;
 
 /**
@@ -67,18 +61,6 @@ public class FedoraTimeMapImpl extends FedoraResourceImpl implements FedoraTimeM
     public static boolean hasMixin(final Node node) {
         try {
             return node.isNodeType(FEDORA_TIME_MAP);
-        } catch (final RepositoryException e) {
-            throw new RepositoryRuntimeException(e);
-        }
-    }
-
-    @Override
-    public FedoraResource getOriginalResource() {
-        try {
-            final Property originalProperty = node.getProperty(MEMENTO_ORIGINAL);
-            final Node originalNode = originalProperty.getNode();
-
-            return Optional.of(originalNode).map(nodeConverter::convert).orElse(null);
         } catch (final RepositoryException e) {
             throw new RepositoryRuntimeException(e);
         }

@@ -95,6 +95,13 @@ public interface FedoraResource {
     boolean isMemento();
 
     /**
+     * Get the Original Resource to which memento resource applies.
+     *
+     * @return the original resource for this
+     */
+    FedoraResource getOriginalResource();
+
+    /**
      * Get the child of this resource at the given path
      *
      * @param relPath the given path

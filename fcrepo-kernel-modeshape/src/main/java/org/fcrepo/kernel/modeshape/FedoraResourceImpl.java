@@ -472,6 +472,21 @@ public class FedoraResourceImpl extends JcrTools implements FedoraTypes, FedoraR
     }
 
     @Override
+    public FedoraResource getOriginalResource() {
+        try {
+            final Property originalProperty = node.getProperty(MEMENTO_ORIGINAL);
+            if (originalProperty == null) {
+                return null;
+            }
+            final Node originalNode = originalProperty.getNode();
+
+            return Optional.of(originalNode).map(nodeConverter::convert).orElse(null);
+        } catch (final RepositoryException e) {
+            throw new RepositoryRuntimeException(e);
+        }
+    }
+
+    @Override
     public FedoraResource getChild(final String relPath) {
         try {
             return nodeConverter.convert(getNode().getNode(relPath));

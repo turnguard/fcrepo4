@@ -17,8 +17,6 @@
  */
 package org.fcrepo.kernel.modeshape;
 
-import static java.util.stream.Stream.empty;
-import static org.fcrepo.kernel.api.RequiredRdfContext.MINIMAL;
 import static org.fcrepo.kernel.modeshape.utils.FedoraTypesUtils.isNonRdfSourceDescription;
 import static org.modeshape.jcr.api.JcrConstants.JCR_CONTENT;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -26,19 +24,12 @@ import static org.slf4j.LoggerFactory.getLogger;
 import javax.jcr.Node;
 import javax.jcr.RepositoryException;
 
-import org.apache.jena.rdf.model.Resource;
-import org.fcrepo.kernel.api.RdfStream;
-import org.fcrepo.kernel.api.TripleCategory;
 import org.fcrepo.kernel.api.exception.RepositoryRuntimeException;
-import org.fcrepo.kernel.api.identifiers.IdentifierConverter;
 import org.fcrepo.kernel.api.models.FedoraResource;
 import org.fcrepo.kernel.api.models.NonRdfSourceDescription;
-import org.fcrepo.kernel.api.rdf.DefaultRdfStream;
 import org.slf4j.Logger;
 
 import java.util.Calendar;
-import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Abstraction for a Fedora datastream backed by a JCR node.
@@ -61,18 +52,12 @@ public class NonRdfSourceDescriptionImpl extends FedoraResourceImpl implements N
 
     @Override
     public FedoraResource getDescribedResource() {
+        if (isMemento()) {
+            // For a memento description, describes original rather than local content
+            final FedoraResource originalResc = getOriginalResource();
+            return new FedoraBinaryImpl(((NonRdfSourceDescriptionImpl) originalResc).getContentNode());
+        }
         return new FedoraBinaryImpl(getContentNode());
-    }
-
-    @Override
-    public RdfStream getTriples(final IdentifierConverter<Resource, FedoraResource> idTranslator,
-            final Set<? extends TripleCategory> contexts) {
-
-        final org.apache.jena.graph.Node subjectNode = idTranslator.reverse().convert(this).asNode();
-        return new DefaultRdfStream(subjectNode, contexts.stream()
-                .filter(contextMap::containsKey)
-                .map(x -> contextMap.get(x).apply(this).apply(idTranslator).apply(contexts.contains(MINIMAL)))
-                .reduce(empty(), Stream::concat));
     }
 
     @Override

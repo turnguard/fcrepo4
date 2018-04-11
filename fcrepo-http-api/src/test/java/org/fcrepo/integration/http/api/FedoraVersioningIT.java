@@ -49,6 +49,7 @@ import static org.fcrepo.kernel.api.FedoraTypes.FCR_FIXITY;
 import static org.fcrepo.kernel.api.FedoraTypes.FCR_METADATA;
 import static org.fcrepo.kernel.api.FedoraTypes.FCR_VERSIONS;
 import static org.fcrepo.kernel.api.RdfLexicon.DESCRIBED_BY;
+import static org.fcrepo.kernel.api.RdfLexicon.DESCRIBES;
 import static org.fcrepo.kernel.api.RdfLexicon.EMBED_CONTAINED;
 import static org.fcrepo.kernel.api.RdfLexicon.NON_RDF_SOURCE;
 import static org.fcrepo.kernel.api.RdfLexicon.RDF_SOURCE;
@@ -572,51 +573,34 @@ public class FedoraVersioningIT extends AbstractResourceIT {
         }
     }
 
-    @Ignore("Disable until binary version creation implemented")
     @Test
-    public void testVersionHeaders() throws IOException {
-        final String id = getRandomUniqueId();
-        createObjectAndClose(id);
-        enableVersioning(id);
+    public void testBinaryMementoHeaders() throws Exception {
+        createVersionedBinary(id);
+        final String mementoUri = createMemento(subjectUri, MEMENTO_DATETIME,
+                OCTET_STREAM_TYPE, BINARY_UPDATED);
 
-        createDatastream(id, "ds", "This DS will be versioned");
-        final String dsId = id + "/ds";
-        enableVersioning(dsId);
+        try (final CloseableHttpResponse response = execute(new HttpGet(mementoUri))) {
+            assertMementoDatetimeHeaderMatches(response, MEMENTO_DATETIME);
 
-        // Version datastream
-        final String versionId = postObjectVersion(dsId);
+            final String describedby = subjectUri + "/" + FCR_METADATA;
+            assertHasLink(response, DESCRIBED_BY, describedby);
+            assertHasLink(response, type, NON_RDF_SOURCE.getURI());
+        }
+    }
 
-        final Link NON_RDF_SOURCE_LINK = fromUri(NON_RDF_SOURCE.getURI()).rel(type.getLocalName()).build();
+    @Test
+    public void testDescriptionMementoHeaders() throws Exception {
+        createVersionedBinary(id);
 
-        final Link DESCRIBED_BY_LINK = fromUri(serverAddress + versionId + "/" + FCR_METADATA).rel(
-                DESCRIBED_BY.getLocalName()).build();
+        final String descriptionUri = subjectUri + "/fcr:metadata";
 
-        // Look for expected Link headers
-        final HttpHead headObjMethod = headObjMethod(versionId);
-        try (final CloseableHttpResponse response = execute(headObjMethod)) {
+        final String mementoUri = createContainerMementoWithBody(descriptionUri, null);
 
-            final Collection<String> linkHeaders = getLinkHeaders(response);
+        try (final CloseableHttpResponse response = execute(new HttpGet(mementoUri))) {
+            assertMementoDatetimeHeaderPresent(response);
 
-            final Set<Link> resultSet = linkHeaders.stream().map(Link::valueOf).flatMap(link -> {
-                final String linkRel = link.getRel();
-                final URI linkUri = link.getUri();
-
-                if (linkRel.equals(NON_RDF_SOURCE_LINK.getRel()) && linkUri.equals(NON_RDF_SOURCE_LINK.getUri())) {
-                    // Found nonRdfSource!
-                    return of(NON_RDF_SOURCE_LINK);
-
-                } else if (linkRel.equals(DESCRIBED_BY_LINK.getRel()) && linkUri.equals(DESCRIBED_BY_LINK.getUri())) {
-                    // Found describedby!
-                    return of(DESCRIBED_BY_LINK);
-                }
-                return empty();
-            }).collect(Collectors.toSet());
-
-            assertTrue("No link headers found!", !linkHeaders.isEmpty());
-            assertTrue("Didn't find NonRdfSource link header! " + NON_RDF_SOURCE_LINK + " ?= " + linkHeaders,
-                    resultSet.contains(NON_RDF_SOURCE_LINK));
-            assertTrue("Didn't find describedby link header! " + DESCRIBED_BY_LINK + " ?= " + linkHeaders,
-                    resultSet.contains(DESCRIBED_BY_LINK));
+            assertHasLink(response, DESCRIBES, subjectUri);
+            assertHasLink(response, type, RDF_SOURCE.getURI());
         }
     }
 
@@ -1045,5 +1029,13 @@ public class FedoraVersioningIT extends AbstractResourceIT {
 
     private static void assertNonRdfSourceMementoUri(final String mementoUri, final String subjectUri) {
         assertTrue(mementoUri.matches(subjectUri + "/fcr:metadata/fcr:versions/\\d+"));
+    }
+
+    private static void assertHasLink(final CloseableHttpResponse response, final Property relation,
+            final String uri) {
+        final String relName = relation.getLocalName();
+        assertTrue("Missing link " + relName + " with value " + uri, getLinkHeaders(response)
+                .stream().map(Link::valueOf)
+                .anyMatch(l -> relName.equals(l.getRel()) && uri.equals(l.getUri().toString())));
     }
 }
