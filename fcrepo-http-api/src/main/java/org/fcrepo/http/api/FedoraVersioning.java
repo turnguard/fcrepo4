@@ -199,8 +199,9 @@ public class FedoraVersioning extends ContentExposingResource {
                 LOGGER.info("Request to add version for date '{}' for '{}'", datetimeHeader, externalPath);
 
                 // Create memento
-                final FedoraResource memento;
-                if (resource instanceof FedoraBinary) {
+                FedoraResource memento = null;
+                final boolean isBinary = resource instanceof FedoraBinary;
+                if (isBinary) {
                     final FedoraBinary binaryResource = (FedoraBinary) resource;
                     if (createFromExisting) {
                         memento = versionService.createBinaryVersion(session.getFedoraSession(),
@@ -209,7 +210,12 @@ public class FedoraVersioning extends ContentExposingResource {
                         memento = createBinaryMementoFromRequest(binaryResource, mementoInstant,
                                 requestBodyStream, digest, contentDisposition, contentType);
                     }
-                } else {
+                }
+                // Create rdf memento if the request resource was an rdf resource or a binary from the
+                // current version of the original resource.
+                if (!isBinary || (isBinary && createFromExisting)) {
+                    // Version the description in case the original is a binary
+                    final FedoraResource originalResource = resource().getDescription();
                     final InputStream bodyStream = createFromExisting ? null : requestBodyStream;
                     final Lang format = createFromExisting ? null : contentTypeToLang(contentType.toString());
                     if (!createFromExisting && format == null) {
@@ -217,8 +223,12 @@ public class FedoraVersioning extends ContentExposingResource {
                                 UNSUPPORTED_MEDIA_TYPE);
                     }
 
-                    memento = versionService.createVersion(session.getFedoraSession(), resource(),
-                            idTranslator, mementoInstant, bodyStream, format);
+                    final FedoraResource rdfMemento = versionService.createVersion(session.getFedoraSession(),
+                            originalResource, idTranslator, mementoInstant, bodyStream, format);
+                    // If a binary memento was also generated, use the binary in the response
+                    if (!isBinary) {
+                        memento = rdfMemento;
+                    }
                 }
 
                 session.commit();

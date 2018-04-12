@@ -442,6 +442,15 @@ public class FedoraVersioningIT extends AbstractResourceIT {
             assertEquals("Binary content of memento must match original content",
                     BINARY_CONTENT, EntityUtils.toString(response.getEntity()));
         }
+
+        // Verifying that the associated description memento was created
+        final String descriptionMementoUri = mementoUri.replace("fcr:versions", "fcr:metadata/fcr:versions");
+
+        final HttpGet descGet = new HttpGet(descriptionMementoUri);
+        try (final CloseableHttpResponse response = execute(descGet)) {
+            assertMementoDatetimeHeaderPresent(response);
+            assertHasLink(response, type, RDF_SOURCE.getURI());
+        }
     }
 
     @Test
@@ -526,6 +535,10 @@ public class FedoraVersioningIT extends AbstractResourceIT {
             assertFalse("Memento type should not be visible",
                     results.contains(ANY, mementoSubject, RDF.type.asNode(), MEMENTO_TYPE_NODE));
         }
+
+        // No binary memento should be created when specifically creating a description memento.
+        final String hypotheticalBinaryUri = mementoUri.replaceAll("fcr:metadata/fcr:versions", "fcr:versions");
+        assertEquals(NOT_FOUND.getStatusCode(), getStatus(new HttpGet(hypotheticalBinaryUri)));
     }
 
     @Test
