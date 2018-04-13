@@ -23,7 +23,6 @@ import static org.slf4j.LoggerFactory.getLogger;
 
 import javax.jcr.Node;
 import javax.jcr.RepositoryException;
-
 import org.fcrepo.kernel.api.exception.RepositoryRuntimeException;
 import org.fcrepo.kernel.api.models.FedoraResource;
 import org.fcrepo.kernel.api.models.NonRdfSourceDescription;
@@ -49,6 +48,12 @@ public class NonRdfSourceDescriptionImpl extends FedoraResourceImpl implements N
     public NonRdfSourceDescriptionImpl(final Node n) {
         super(n);
     }
+
+    // @Override
+    // public RdfStream getTriples(final IdentifierConverter<Resource, FedoraResource> idTranslator,
+    // final Set<? extends TripleCategory> contexts) {
+    // throw new UnsupportedOperationException("Retrieval of triples for datastream not supported");
+    // }
 
     @Override
     public FedoraResource getDescribedResource() {

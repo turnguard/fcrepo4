@@ -51,6 +51,7 @@ import static org.fcrepo.kernel.api.FedoraTypes.FCR_VERSIONS;
 import static org.fcrepo.kernel.api.RdfLexicon.DESCRIBED_BY;
 import static org.fcrepo.kernel.api.RdfLexicon.DESCRIBES;
 import static org.fcrepo.kernel.api.RdfLexicon.EMBED_CONTAINED;
+import static org.fcrepo.kernel.api.RdfLexicon.FEDORA_BINARY;
 import static org.fcrepo.kernel.api.RdfLexicon.NON_RDF_SOURCE;
 import static org.fcrepo.kernel.api.RdfLexicon.RDF_SOURCE;
 import static org.fcrepo.kernel.api.RdfLexicon.REPOSITORY_NAMESPACE;
@@ -100,6 +101,7 @@ import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.riot.RDFFormat;
 import org.apache.jena.riot.RDFLanguages;
 import org.apache.jena.sparql.core.DatasetGraph;
+import org.apache.jena.vocabulary.DC;
 import org.apache.jena.vocabulary.RDF;
 import org.fcrepo.http.commons.test.util.CloseableDataset;
 import org.junit.Before;
@@ -506,7 +508,7 @@ public class FedoraVersioningIT extends AbstractResourceIT {
         createVersionedBinary(id);
 
         final String mementoUri = createMemento(subjectUri, MEMENTO_DATETIME,
-                OCTET_STREAM_TYPE, BINARY_UPDATED);
+                "text/plain", BINARY_UPDATED);
         assertMementoUri(mementoUri, subjectUri);
 
         // Verify that the memento has the updated binary
@@ -515,6 +517,8 @@ public class FedoraVersioningIT extends AbstractResourceIT {
 
             assertEquals("Binary content of memento must match updated content",
                     BINARY_UPDATED, EntityUtils.toString(response.getEntity()));
+            assertEquals("Must return differing mimetype of memento",
+                    "text/plain", response.getFirstHeader(CONTENT_TYPE).getValue());
         }
     }
 
@@ -527,6 +531,59 @@ public class FedoraVersioningIT extends AbstractResourceIT {
         final String mementoUri = createContainerMementoWithBody(descriptionUri, null);
         assertMementoUri(mementoUri, descriptionUri);
 
+        setDescriptionProperty(id, null, DC.title.getURI(), "Updated");
+
+        try (final CloseableDataset dataset = getDataset(new HttpGet(mementoUri))) {
+            final DatasetGraph results = dataset.asDatasetGraph();
+
+            final Node mementoSubject = createURI(subjectUri);
+
+            assertFalse("Property added to original must not appear in memento",
+                    results.contains(ANY, mementoSubject, DC.title.asNode(), ANY));
+            assertFalse("Memento type should not be visible",
+                    results.contains(ANY, mementoSubject, RDF.type.asNode(), MEMENTO_TYPE_NODE));
+            assertFalse("Property added to original must not appear in memento",
+                    results.contains(ANY, mementoSubject, RDF.type.asNode(), FEDORA_BINARY.asNode()));
+        }
+
+        // No binary memento should be created when specifically creating a description memento.
+        final String hypotheticalBinaryUri = mementoUri.replaceAll("fcr:metadata/fcr:versions", "fcr:versions");
+        assertEquals(NOT_FOUND.getStatusCode(), getStatus(new HttpGet(hypotheticalBinaryUri)));
+    }
+
+    /*
+     * Attempt to create binary description with container triples
+     */
+    @Test
+    public void testCreateVersionOfBinaryDescriptionInvalidTriples() throws Exception {
+        final String containerId = getRandomUniqueId();
+        final String containerSubjectUri = serverAddress + containerId;
+        createObjectAndClose(containerId);
+
+        createVersionedBinary(id);
+
+        final String descriptionUri = subjectUri + "/fcr:metadata";
+
+        final String containerBody = createContainerMementoBodyContent(containerSubjectUri, "text/n3");
+        final HttpPost createMethod = postObjMethod(descriptionUri);
+        createMethod.addHeader(CONTENT_TYPE, "text/n3");
+        createMethod.setEntity(new StringEntity(containerBody));
+
+        // Attempt to create memento with partial record
+        try (final CloseableHttpResponse response = execute(createMethod)) {
+            assertEquals("Didn't get a BAD_REQUEST response!", BAD_REQUEST.getStatusCode(), getStatus(response));
+        }
+    }
+
+    @Test
+    public void testCreateVersionBinaryDescriptionWithBodyAndDatetime() throws Exception {
+        createVersionedBinary(id);
+
+        final String descriptionUri = subjectUri + "/fcr:metadata";
+
+        final String mementoUri = createContainerMementoWithBody(descriptionUri, MEMENTO_DATETIME);
+        assertMementoUri(mementoUri, descriptionUri);
+
         try (final CloseableDataset dataset = getDataset(new HttpGet(mementoUri))) {
             final DatasetGraph results = dataset.asDatasetGraph();
 
@@ -535,10 +592,40 @@ public class FedoraVersioningIT extends AbstractResourceIT {
             assertFalse("Memento type should not be visible",
                     results.contains(ANY, mementoSubject, RDF.type.asNode(), MEMENTO_TYPE_NODE));
         }
+    }
 
-        // No binary memento should be created when specifically creating a description memento.
-        final String hypotheticalBinaryUri = mementoUri.replaceAll("fcr:metadata/fcr:versions", "fcr:versions");
-        assertEquals(NOT_FOUND.getStatusCode(), getStatus(new HttpGet(hypotheticalBinaryUri)));
+    @Test
+    public void testCreateVersionHistoricBinaryAndDescription() throws Exception {
+        createVersionedBinary(id);
+
+        final String descriptionUri = subjectUri + "/fcr:metadata";
+
+        final String binaryMementoUri = createMemento(subjectUri, MEMENTO_DATETIME,
+                "text/plain", "content");
+        assertMementoUri(binaryMementoUri, subjectUri);
+
+        final String mementoUri = createContainerMementoWithBody(descriptionUri, MEMENTO_DATETIME);
+        assertMementoUri(mementoUri, descriptionUri);
+
+        try (final CloseableDataset dataset = getDataset(new HttpGet(mementoUri))) {
+            final DatasetGraph results = dataset.asDatasetGraph();
+
+            final Node mementoSubject = createURI(mementoUri);
+
+            assertTrue("Type must be a fedora:Binary",
+                    results.contains(ANY, mementoSubject, RDF.type.asNode(), FEDORA_BINARY.asNode()));
+            assertTrue("Memento must have first updated property",
+                    results.contains(ANY, mementoSubject, TEST_PROPERTY_NODE, createLiteral("bar")));
+        }
+
+        // Verify that the memento has the updated binary
+        try (final CloseableHttpResponse response = execute(new HttpGet(binaryMementoUri))) {
+            assertMementoDatetimeHeaderMatches(response, MEMENTO_DATETIME);
+
+            assertEquals("Binary content of memento must reflect historic version",
+                    "content", EntityUtils.toString(response.getEntity()));
+            assertEquals("text/plain", response.getFirstHeader(CONTENT_TYPE).getValue());
+        }
     }
 
     @Test
@@ -918,7 +1005,8 @@ public class FedoraVersioningIT extends AbstractResourceIT {
         try (final CloseableHttpResponse response = execute(httpGet)) {
             model.read(response.getEntity().getContent(), "", rdfLang.getName());
         }
-        final Resource subjectResc = model.getResource(subjectUri);
+        final String resourceUri = subjectUri.replace("/fcr:metadata", "");
+        final Resource subjectResc = model.getResource(resourceUri);
         subjectResc.removeAll(TEST_PROPERTY);
         subjectResc.addLiteral(TEST_PROPERTY, "bar");
 

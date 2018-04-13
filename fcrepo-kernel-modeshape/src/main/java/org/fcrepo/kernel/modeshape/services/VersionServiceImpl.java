@@ -37,8 +37,10 @@ import static org.fcrepo.kernel.api.RequiredRdfContext.SERVER_MANAGED;
 import static org.fcrepo.kernel.modeshape.FedoraResourceImpl.LDPCV_BINARY_TIME_MAP;
 import static org.fcrepo.kernel.modeshape.FedoraResourceImpl.LDPCV_TIME_MAP;
 import static org.fcrepo.kernel.modeshape.FedoraSessionImpl.getJcrSession;
+import static org.fcrepo.kernel.modeshape.rdf.impl.RequiredPropertiesUtil.assertRequiredBinaryTriples;
 import static org.fcrepo.kernel.modeshape.rdf.impl.RequiredPropertiesUtil.assertRequiredContainerTriples;
 import static org.fcrepo.kernel.modeshape.utils.FedoraTypesUtils.getJcrNode;
+import static org.fcrepo.kernel.api.RdfLexicon.HAS_FIXITY_SERVICE;
 import static org.modeshape.jcr.api.JcrConstants.JCR_CONTENT;
 import static org.modeshape.jcr.api.JcrConstants.NT_FOLDER;
 import static org.modeshape.jcr.api.JcrConstants.NT_RESOURCE;
@@ -137,6 +139,7 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
 
         assertMementoDoesNotExist(session, mementoPath);
 
+        // Construct an unpopulated resource of the appropriate type for new memento
         final FedoraResource mementoResource;
         if (resource instanceof Container) {
             mementoResource = createContainer(session, mementoPath);
@@ -144,8 +147,11 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
             mementoResource = createNonRdfSourceMemento(session, mementoPath);
         }
 
+        decorateWithMementoProperties(session, mementoPath, dateTime, resource);
+
         final String mementoUri = getUri(mementoResource, idTranslator);
 
+        // uri of the original resource for remapping triples to memento uri
         final String resourceUri;
 
         final RdfStream mementoRdfStream;
@@ -155,23 +161,29 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
             mementoRdfStream = described.getTriples(idTranslator, VERSION_TRIPLES);
             resourceUri = getUri(described, idTranslator);
         } else {
-            resourceUri = getUri(resource, idTranslator);
+            resourceUri = getUri(resource.getDescribedResource(), idTranslator);
 
             final Model inputModel = ModelFactory.createDefaultModel();
             inputModel.read(rdfInputStream, mementoUri, rdfFormat.getName());
 
             // Validate server managed triples are provided
-            assertRequiredContainerTriples(inputModel);
+            if (mementoResource instanceof NonRdfSourceDescription) {
+                assertRequiredBinaryTriples(inputModel);
+            } else {
+                assertRequiredContainerTriples(inputModel);
+            }
 
             mementoRdfStream = DefaultRdfStream.fromModel(createURI(mementoUri), inputModel);
         }
 
+        // Remap the subject of triples to the memento's uri
         final RdfStream mappedStream = remapRdfSubjects(resourceUri, mementoUri, mementoRdfStream);
 
+        final RdfStream removeGenerated = new DefaultRdfStream(createURI(mementoUri), mappedStream
+                .filter(t -> !HAS_FIXITY_SERVICE.getURI().equals(t.getPredicate().getURI())));
+        // Add triples from source
         final Session jcrSession = getJcrSession(session);
-        new RelaxedRdfAdder(idTranslator, jcrSession, mappedStream, session.getNamespaces()).consume();
-
-        decorateWithMementoProperties(session, mementoPath, dateTime, resource);
+        new RelaxedRdfAdder(idTranslator, jcrSession, removeGenerated, session.getNamespaces()).consume();
 
         return mementoResource;
     }
@@ -185,6 +197,32 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
             }
 
             return new ContainerImpl(node);
+        } catch (final RepositoryException e) {
+            throw new RepositoryRuntimeException(e);
+        }
+    }
+
+    /*
+     * Creates memento node for non-rdf source using leaf node type which does not require children or jcr:content
+     */
+    private NonRdfSourceDescription createNonRdfSourceMemento(final FedoraSession session, final String path) {
+        try {
+            // Using nt:leafNode to avoid requiring jcr:content or allowing subfolders in memento
+            final Node dsNode = findOrCreateNode(session, path, NT_LEAF_NODE);
+
+            if (dsNode.canAddMixin(FEDORA_RESOURCE)) {
+                dsNode.addMixin(FEDORA_RESOURCE);
+            }
+            //
+            // if (dsNode.canAddMixin(FEDORA_NON_RDF_SOURCE_DESCRIPTION)) {
+            // dsNode.addMixin(FEDORA_NON_RDF_SOURCE_DESCRIPTION);
+            // }
+
+            if (dsNode.canAddMixin(FEDORA_BINARY)) {
+                dsNode.addMixin(FEDORA_BINARY);
+            }
+
+            return new NonRdfSourceDescriptionImpl(dsNode);
         } catch (final RepositoryException e) {
             throw new RepositoryRuntimeException(e);
         }
@@ -276,25 +314,6 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
         }
     }
 
-    private NonRdfSourceDescription createNonRdfSourceMemento(final FedoraSession session, final String path) {
-        try {
-            // Using nt:leafNode to avoid requiring jcr:content or allowing subfolders in memento
-            final Node dsNode = findOrCreateNode(session, path, NT_LEAF_NODE);
-
-            if (dsNode.canAddMixin(FEDORA_RESOURCE)) {
-                dsNode.addMixin(FEDORA_RESOURCE);
-            }
-
-            if (dsNode.canAddMixin(FEDORA_NON_RDF_SOURCE_DESCRIPTION)) {
-                dsNode.addMixin(FEDORA_NON_RDF_SOURCE_DESCRIPTION);
-            }
-
-            return new NonRdfSourceDescriptionImpl(dsNode);
-        } catch (final RepositoryException e) {
-            throw new RepositoryRuntimeException(e);
-        }
-    }
-
     private FedoraBinary createBinary(final FedoraSession session, final String path) {
         try {
             final Node dsNode = findOrCreateNode(session, path, NT_VERSION_FILE);
@@ -319,6 +338,14 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
         }
     }
 
+    /**
+     * Produces the node path where the memento for the given resource should be stored. Path depends on the type of
+     * resource provided (binary timemaps have a distinct path) and memento datetime.
+     *
+     * @param resource resource for which a memento path will be generated
+     * @param datetime memento datetime.
+     * @return
+     */
     private String makeMementoPath(final FedoraResource resource, final Instant datetime) {
         final String ldpcvName = resource instanceof FedoraBinary ? LDPCV_BINARY_TIME_MAP : LDPCV_TIME_MAP;
         return resource.getPath() + "/" + ldpcvName + "/" + MEMENTO_DATETIME_ID_FORMATTER.format(datetime);
@@ -332,6 +359,9 @@ public class VersionServiceImpl extends AbstractService implements VersionServic
         return idTranslator.reverse().convert(resource).getURI();
     }
 
+    /*
+     * Add required memento properties and types to resource
+     */
     protected void decorateWithMementoProperties(final FedoraSession session, final String mementoPath,
             final Instant dateTime, final FedoraResource originalResc) {
         try {

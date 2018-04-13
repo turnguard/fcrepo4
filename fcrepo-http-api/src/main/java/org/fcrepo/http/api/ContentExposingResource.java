@@ -286,7 +286,7 @@ public abstract class ContentExposingResource extends FedoraBaseResource {
      */
     protected RdfStream getResourceTriples(final int limit) {
         // use the thing described, not the description, for the subject of descriptive triples.
-        if (resource() instanceof NonRdfSourceDescription) {
+        if (resource() instanceof NonRdfSourceDescription && !resource().isMemento()) {
             resource = resource().getDescribedResource();
         }
         final PreferTag returnPreference;
