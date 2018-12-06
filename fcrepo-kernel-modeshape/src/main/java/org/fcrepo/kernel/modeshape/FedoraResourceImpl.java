@@ -142,6 +142,7 @@ import org.fcrepo.kernel.modeshape.rdf.converters.PropertyConverter;
 import org.fcrepo.kernel.modeshape.rdf.impl.ChildrenRdfContext;
 import org.fcrepo.kernel.modeshape.rdf.impl.ContentRdfContext;
 import org.fcrepo.kernel.modeshape.rdf.impl.HashRdfContext;
+import org.fcrepo.kernel.modeshape.rdf.impl.LdpIndirectContainerContext;
 import org.fcrepo.kernel.modeshape.rdf.impl.InternalIdentifierTranslator;
 import org.fcrepo.kernel.modeshape.rdf.impl.LdpContainerRdfContext;
 import org.fcrepo.kernel.modeshape.rdf.impl.LdpIsMemberOfRdfContext;
@@ -186,8 +187,10 @@ public class FedoraResourceImpl extends JcrTools implements FedoraTypes, FedoraR
     Function<IdentifierConverter<Resource, FedoraResource>, Function<Boolean, Stream<Triple>>>> {}
 
     private static final RdfGenerator getDefaultTriples = resource -> translator -> uncheck(minimal -> {
+        LOGGER.debug("getDefaultTriples: " + resource);
         final Stream<Stream<Triple>> min = of(
             new TypeRdfContext(resource, translator),
+            new LdpIndirectContainerContext(resource, translator),
             new PropertiesRdfContext(resource, translator));
         if (!minimal) {
             final Stream<Stream<Triple>> extra = of(
