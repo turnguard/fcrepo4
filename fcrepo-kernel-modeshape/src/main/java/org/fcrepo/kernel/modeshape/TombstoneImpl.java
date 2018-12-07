@@ -19,6 +19,7 @@ package org.fcrepo.kernel.modeshape;
 
 import javax.jcr.Node;
 import javax.jcr.RepositoryException;
+import static org.fcrepo.kernel.api.FedoraTypes.FEDORA_TOMBSTONE;
 
 import org.fcrepo.kernel.api.exception.RepositoryRuntimeException;
 import org.fcrepo.kernel.api.models.Tombstone;
